@@ -7,31 +7,36 @@ cd $TMP
 cat $1 | jq -r ".pdf1" | base64 -d > a.pdf
 cat $1 | jq -r ".pdf2" | base64 -d > b.pdf
 
-pdftoppm a.pdf aa
-pdftoppm b.pdf bb
+pdftoppm a.pdf aa &
+pdftoppm b.pdf bb &
+
+wait
 
 maxaa=$(ls -l aa* | wc -l)
 maxbb=$(ls -l bb* | wc -l)
 max=$(( maxaa > maxbb ? maxaa : maxbb ))
 
-diff=0
 for idx in $(seq 1 $max); do
   if [ -e aa-$idx.ppm ]; then
     if [ -e bb-$idx.ppm ]; then
-      compare aa-$idx.ppm bb-$idx.ppm rr-$idx.ppm
-      ret=$?
-      [ $ret -ne 0 ] && diff=$(($diff + 1));
+      (compare aa-$idx.ppm bb-$idx.ppm rr-$idx.ppm; echo "$?" > status-$idx.txt) &
     else
-      cp aa-$idx.ppm rr-$idx.ppm
-      diff=$(($diff + 1))
+      (cp aa-$idx.ppm rr-$idx.ppm; echo "1" > status-$idx.txt) &
     fi
   else
-    cp bb-$idx.ppm rr-$idx.ppm
-    diff=$(($diff + 1))
+    (cp bb-$idx.ppm rr-$idx.ppm; echo "1" > status-$idx.txt) &
   fi
 done
 
-convert $(ls rr-*.ppm) res.pdf
+wait
+convert $(ls rr-*.ppm) res.pdf &
+
+diff=0
+for idx in $(seq 1 $max); do
+  diff=$(($diff + $(cat status-$idx.txt)))
+done
+
+wait
 
 echo -n '{"status": '$diff', "pdf": "' > $OUT
 cat res.pdf | base64 | tr -d '\n' >> $OUT
