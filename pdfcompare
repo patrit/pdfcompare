@@ -1,0 +1,41 @@
+#!/bin/sh
+
+OUT=$2
+TMP=$(mktemp -d)
+cd $TMP
+
+cat $1 | jq -r ".pdf1" | base64 -d > a.pdf
+cat $1 | jq -r ".pdf2" | base64 -d > b.pdf
+
+pdftoppm a.pdf aa
+pdftoppm b.pdf bb
+
+maxaa=$(ls -l aa* | wc -l)
+maxbb=$(ls -l bb* | wc -l)
+max=$(( maxaa > maxbb ? maxaa : maxbb ))
+
+diff=0
+for idx in $(seq 1 $max); do
+  if [ -e aa-$idx.ppm ]; then
+    if [ -e bb-$idx.ppm ]; then
+      compare aa-$idx.ppm bb-$idx.ppm rr-$idx.ppm
+      ret=$?
+      [ $ret -ne 0 ] && diff=$(($diff + 1));
+    else
+      cp aa-$idx.ppm rr-$idx.ppm
+      diff=$(($diff + 1))
+    fi
+  else
+    cp bb-$idx.ppm rr-$idx.ppm
+    diff=$(($diff + 1))
+  fi
+done
+
+convert $(ls rr-*.ppm) res.pdf
+
+echo -n '{"status": '$diff', "pdf": "' > $OUT
+cat res.pdf | base64 | tr -d '\n' >> $OUT
+echo '"}' >> $OUT
+
+cd
+rm -rf $TMP
