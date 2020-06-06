@@ -4,12 +4,12 @@ OUT=$2
 TMP=$(mktemp -d)
 cd $TMP
 
-cat $1 | jq -r ".pdf1" | base64 -d > a.pdf
-cat $1 | jq -r ".pdf2" | base64 -d > b.pdf
+(cat $1 | jq -r ".pdf1" | base64 -d > a.pdf) &
+(cat $1 | jq -r ".pdf2" | base64 -d > b.pdf) &
+wait
 
 pdftoppm a.pdf aa &
 pdftoppm b.pdf bb &
-
 wait
 
 maxaa=$(ls -l aa* | wc -l)
@@ -27,15 +27,14 @@ for idx in $(seq 1 $max); do
     (cp bb-$idx.ppm rr-$idx.ppm; echo "1" > status-$idx.txt) &
   fi
 done
-
 wait
+
 convert $(ls rr-*.ppm) res.pdf &
 
 diff=0
 for idx in $(seq 1 $max); do
   diff=$(($diff + $(cat status-$idx.txt)))
 done
-
 wait
 
 echo -n '{"status": '$diff', "pdf": "' > $OUT
